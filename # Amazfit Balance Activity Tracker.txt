@@ -1,0 +1,343 @@
+# Amazfit Balance Activity Tracker — Project Summary
+Use this to continue the project in a new chat. Paste this whole document at the start.
+
+---
+
+## What We Are Building
+A ZeppOS Mini Program for the **Amazfit Balance** watch that:
+- Shows a list of 5 activities: Working, Studying, Exercise, Reading, Bible Study
+- Lets you tap to start/stop a timer for each activity
+- Shows progress bars toward daily goals
+- Saves data locally on the watch
+- Syncs to a web dashboard via phone (Supabase backend)
+
+---
+
+## Computer Info
+- OS: Windows
+- Username: 42070
+- Project path: `C:\Users\42070\Desktop\activity-tracker`
+- Node.js: v24.12.0
+- Zeus CLI: installed globally
+
+---
+
+## Current Status
+- ✅ Zeus CLI installed
+- ✅ Project created at `C:\Users\42070\Desktop\activity-tracker`
+- ✅ Simulator installed and running (Balance v1.2.0 downloaded)
+- ✅ app.json configured with correct Balance deviceSources
+- ✅ Icon resized to 80x80 using PowerShell
+- ⏳ STUCK ON: Icon not found error — need to place icon at `assets/balance/icon.png`
+
+---
+
+## Last Thing To Do (resume here)
+Run these 3 commands in order:
+
+**1. Create the balance assets folder:**
+```
+mkdir "C:\Users\42070\Desktop\activity-tracker\assets\balance"
+```
+
+**2. Copy the icon into it:**
+```
+Copy-Item "C:\Users\42070\Desktop\activity-tracker\icon.png" -Destination "C:\Users\42070\Desktop\activity-tracker\assets\balance\icon.png"
+```
+
+**3. Make sure app.json icon line says:**
+```json
+"icon": "icon.png",
+```
+
+**4. Run:**
+```
+zeus dev
+```
+
+---
+
+## Current app.json (correct version)
+```json
+{
+  "configVersion": "v2",
+  "defaultLanguage": "en-US",
+  "app": {
+    "appId": 1108210,
+    "appName": "Activity Tracker",
+    "appType": "app",
+    "version": { "code": 1, "name": "1.0.0" },
+    "icon": "icon.png",
+    "vender": "yourname",
+    "description": "Track daily activities"
+  },
+  "runtime": {
+    "apiVersion": {
+      "compatible": "3.6.0",
+      "target": "3.6.0",
+      "minVersion": "3.6.0"
+    }
+  },
+  "permissions": [],
+  "targets": {
+    "balance": {
+      "module": {
+        "page": { "pages": ["page/index"] },
+        "app-side": { "path": "app-side/index" }
+      },
+      "platforms": [
+        { "name": "Balance", "deviceSource": 8519936 },
+        { "name": "Balance", "deviceSource": 8519937 },
+        { "name": "Balance", "deviceSource": 8519939 }
+      ],
+      "designWidth": 466
+    }
+  }
+}
+```
+
+---
+
+## Current page/index.js (simple test version)
+```javascript
+import { createWidget, widget, align } from "@zos/ui"
+
+Page({
+  onInit() {
+    createWidget(widget.TEXT, {
+      x: 100,
+      y: 200,
+      w: 266,
+      h: 60,
+      text: "Activity Tracker",
+      color: 0xffffff,
+      text_size: 28,
+      align_h: align.CENTER_H,
+    })
+  }
+})
+```
+
+---
+
+## Full Watch App Code (page/index.js — use after test works)
+```javascript
+import { createWidget, widget, align, event } from "@zos/ui"
+import { LocalStorage } from "@zos/storage"
+
+const ACTIVITIES = [
+  { id: "working",  label: "Working",     color: 0x4f8ef7, goalMin: 480 },
+  { id: "studying", label: "Studying",    color: 0xa855f7, goalMin: 120 },
+  { id: "exercise", label: "Exercise",    color: 0x22c55e, goalMin: 60  },
+  { id: "reading",  label: "Reading",     color: 0xf59e0b, goalMin: 30  },
+  { id: "bible",    label: "Bible Study", color: 0xec4899, goalMin: 30  },
+]
+
+function getTodayKey() {
+  const d = new Date()
+  return `sessions_${d.getFullYear()}_${d.getMonth()}_${d.getDate()}`
+}
+
+function loadTodayData() {
+  const saved = LocalStorage.getItem(getTodayKey())
+  if (saved) return JSON.parse(saved)
+  const empty = {}
+  ACTIVITIES.forEach(a => (empty[a.id] = 0))
+  return empty
+}
+
+function saveTodayData(data) {
+  LocalStorage.setItem(getTodayKey(), JSON.stringify(data))
+}
+
+Page({
+  state: {
+    activeId: null,
+    startTime: null,
+    todayData: null,
+    timerInterval: null,
+    widgets: {},
+  },
+
+  onInit() {
+    this.state.todayData = loadTodayData()
+    this.buildUI()
+  },
+
+  buildUI() {
+    const SCREEN_W = 466
+    const ITEM_H = 80
+    const PADDING = 20
+    const BAR_W = SCREEN_W - PADDING * 2
+
+    createWidget(widget.TEXT, {
+      x: 0, y: 20,
+      w: SCREEN_W, h: 50,
+      text: "Activity Tracker",
+      color: 0xffffff,
+      text_size: 28,
+      align_h: align.CENTER_H,
+    })
+
+    ACTIVITIES.forEach((act, i) => {
+      const y = 80 + i * (ITEM_H + 12)
+
+      const card = createWidget(widget.FILL_RECT, {
+        x: PADDING, y,
+        w: BAR_W, h: ITEM_H,
+        radius: 16,
+        color: 0x1e2433,
+      })
+
+      createWidget(widget.TEXT, {
+        x: PADDING + 14, y: y + 10,
+        w: 200, h: 30,
+        text: act.label,
+        color: 0xffffff,
+        text_size: 20,
+      })
+
+      const timeText = createWidget(widget.TEXT, {
+        x: PADDING + 14, y: y + 42,
+        w: 180, h: 24,
+        text: this.formatTime(this.state.todayData[act.id]),
+        color: act.color,
+        text_size: 18,
+      })
+
+      createWidget(widget.FILL_RECT, {
+        x: SCREEN_W - PADDING - 100, y: y + 28,
+        w: 88, h: 10,
+        radius: 5,
+        color: 0x2a3050,
+      })
+
+      const progress = Math.min(88, Math.round((this.state.todayData[act.id] / act.goalMin) * 88))
+      const progressBar = createWidget(widget.FILL_RECT, {
+        x: SCREEN_W - PADDING - 100, y: y + 28,
+        w: Math.max(0, progress), h: 10,
+        radius: 5,
+        color: act.color,
+      })
+
+      const btn = createWidget(widget.TEXT, {
+        x: SCREEN_W - PADDING - 80, y: y + 48,
+        w: 68, h: 24,
+        text: "START",
+        color: act.color,
+        text_size: 16,
+        align_h: align.CENTER_H,
+      })
+
+      this.state.widgets[act.id] = { timeText, progressBar, btn }
+
+      card.addEventListener(event.CLICK_UP, () => {
+        this.handleTap(act)
+      })
+    })
+  },
+
+  handleTap(act) {
+    const s = this.state
+    if (s.activeId === act.id) {
+      clearInterval(s.timerInterval)
+      const elapsed = Math.round((Date.now() - s.startTime) / 60000)
+      s.todayData[act.id] += elapsed
+      saveTodayData(s.todayData)
+      s.activeId = null
+      s.startTime = null
+      this.updateWidget(act.id)
+    } else {
+      if (s.activeId) {
+        const prev = ACTIVITIES.find(a => a.id === s.activeId)
+        const elapsed = Math.round((Date.now() - s.startTime) / 60000)
+        s.todayData[prev.id] += elapsed
+        saveTodayData(s.todayData)
+        this.updateWidget(prev.id)
+        clearInterval(s.timerInterval)
+      }
+      s.activeId = act.id
+      s.startTime = Date.now()
+      s.timerInterval = setInterval(() => {
+        this.updateWidget(act.id)
+      }, 30000)
+      this.updateWidget(act.id)
+    }
+  },
+
+  updateWidget(actId) {
+    const s = this.state
+    const act = ACTIVITIES.find(a => a.id === actId)
+    const w = s.widgets[actId]
+    if (!act || !w) return
+    let totalMins = s.todayData[actId]
+    if (s.activeId === actId && s.startTime) {
+      totalMins += Math.round((Date.now() - s.startTime) / 60000)
+    }
+    w.timeText.setProperty("text", this.formatTime(totalMins))
+    const barW = Math.min(88, Math.round((totalMins / act.goalMin) * 88))
+    w.progressBar.setProperty("w", Math.max(0, barW))
+    w.btn.setProperty("text", s.activeId === actId ? "STOP" : "START")
+    w.btn.setProperty("color", s.activeId === actId ? 0xff4444 : act.color)
+  },
+
+  formatTime(mins) {
+    if (!mins || mins === 0) return "0m"
+    const h = Math.floor(mins / 60)
+    const m = mins % 60
+    if (h === 0) return `${m}m`
+    if (m === 0) return `${h}h`
+    return `${h}h ${m}m`
+  },
+
+  onDestroy() {
+    if (this.state.timerInterval) clearInterval(this.state.timerInterval)
+  },
+})
+```
+
+---
+
+## app-side/index.js (phone bridge)
+```javascript
+import { BaseSideService } from "@zeppos/zml/base-side"
+
+const SERVER_URL = "YOUR_SERVER_URL/api/sync"
+
+AppSideService(
+  BaseSideService({
+    onInit() {},
+    onRequest(req, res) {
+      if (req.method === "SYNC_DATA") {
+        this.syncToServer(req.params, res)
+      }
+    },
+    async syncToServer(params, res) {
+      try {
+        const response = await fetch(SERVER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            date: params.date,
+            sessions: params.sessions,
+          }),
+        })
+        const result = await response.json()
+        res(null, { success: true })
+      } catch (err) {
+        res(null, { success: false, error: err.message })
+      }
+    },
+    onDestroy() {},
+  })
+)
+```
+
+---
+
+## Next Steps After Simulator Works
+1. ✅ Get simulator running
+2. Replace simple test code with full watch app code above
+3. Set up Supabase free database at https://supabase.com
+4. Replace YOUR_SERVER_URL in app-side/index.js
+5. Install on real watch: run `zeus preview`, scan QR with Zepp app
